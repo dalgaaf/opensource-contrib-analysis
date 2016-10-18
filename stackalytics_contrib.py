@@ -30,7 +30,7 @@ def total_reviews(marks):
     return total
 
 
-def pull_contributions(releases: str, modules: str, 
+def pull_contributions(project: str, releases: str, modules: str, 
                        companies: str, outfile_name: str):
 
     results = []
@@ -42,7 +42,7 @@ def pull_contributions(releases: str, modules: str,
     _current = 0
 
     # default parameter for OpenStack statistics
-    parms['project_type'] = "openstack"
+    parms['project_type'] = project.lower() 
 
     # TODO: iter over the release/module/company
     split_releases = releases.split(",")
@@ -166,6 +166,7 @@ def example0():
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description="Stackalytics data retriever")
+    parser.add_argument('-p', '--project', dest='project', help='project name')
     parser.add_argument('-r', '--releases', dest='releases', help='OpenStack release names')
     parser.add_argument('-m', '--modules', dest='modules', help='OpenStack module names')
     parser.add_argument('-c', '--companies', dest='companies', help='Company names')
@@ -174,6 +175,8 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
+    if not args.project:
+        args.project = "openstack"
     if not args.releases:
         args.releases = "Newton,Mitaka,Liberty,Kilo,Juno,All"
     if not args.companies:
@@ -181,4 +184,4 @@ if __name__ == '__main__':
     if not args.modules:
         args.modules = "All,ceilometer-group,cinder-group,glance-group,heat-group,horizon-group,ironic-group,keystone-group,neutron-group,nova-group,sahara-group,swift-group,oslo-group,security-group,documentation-group"
 
-    pull_contributions(args.releases, args.modules, args.companies, args.outfile_name)
+    pull_contributions(args.project, args.releases, args.modules, args.companies, args.outfile_name)
