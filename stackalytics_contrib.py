@@ -16,8 +16,8 @@ import pytz
 from progressbar import Bar, ProgressBar, Percentage, RotatingMarker, ETA, FileTransferSpeed
 
 # Base URL being accessed
-BASE_URL = 'http://stackalytics.com/api/1.0/contribution'
-
+BASE_URL_CONTRIB = 'http://stackalytics.com/api/1.0/contribution'
+BASE_URL_ENGINEERS = 'http://stackalytics.com/api/1.0/stats/engineers'
 
 def total_reviews(marks):
     """The API call above returns a set of "marks", representing code reviews
@@ -29,6 +29,124 @@ def total_reviews(marks):
         total += i
     return total
 
+def pull_contributors(project: str, releases: str, modules: str,
+                      companies: str, outfile_name: str):
+
+    results = []
+    parms = {}
+    row = []
+    _release = None
+    _module = None
+    _company = None
+    _current = 0
+    _all = False
+
+    # default parameter for OpenStack statistics
+    parms['project_type'] = project.lower()
+
+    # TODO: iter over the release/module/company
+    split_releases = releases.split(",")
+    split_companies = companies.split(",")
+    split_modules = []
+
+    modules = modules.lower()
+
+    if "all" in modules:
+        _all = True
+        split_modules.append("all")
+        modules = modules.replace('all,', '')
+    split_modules.append(modules)
+
+    total = len(split_releases) * len(split_companies)
+    widgets = ['Retrieve Stackalytics data: ', Percentage(), ' ', Bar(marker='#', left='[', right=']'), ' ', ETA()]
+    pbar = ProgressBar(widgets=widgets, maxval=total).start()
+
+    for release in split_releases:
+        parms['release'] = release.lower()
+        _module = None
+        # append row if needed
+        if row and _release and _release != release:
+            results.append(row)
+            row = []
+            _release = ""
+
+        if not _release:
+            row.extend([release])
+
+        for company in split_companies:
+            authors = []
+            if company.lower() == "all":
+                parms['company'] = ""
+            else:
+                parms['company'] = company.lower()
+
+            # split off all, then use the rest for one single check
+            for module in split_modules:
+                if module.lower() == "all":
+                    parms['module'] = ""
+                else:
+                    parms['module'] = module.lower()
+
+                # Encode the query string
+                querystring = parse.urlencode(parms)
+
+                # Make a GET request and read the response
+                try:
+                    u = request.urlopen(BASE_URL_ENGINEERS + '?' + querystring)
+                    contributors = json.loads(u.read().decode(encoding='UTF-8'))['stats']
+
+                    for author in contributors:
+                        authors.append(author['name'])
+
+                    # temp vars
+                    _release = release
+                    _company = company
+                    _module = module
+
+                except error.HTTPError:
+                    print("Couldn't retrieve data!", file=sys.stderr)
+                except:
+                    raise
+
+                row.extend([len(list(set(authors)))])
+                # print ("#AUTHORS per release and module:", release, module, len(list(set(authors))))
+                authors = []
+
+            _current+=1
+            pbar.update(_current)
+
+    if row:
+        # append last row if needed
+        results.append(row)
+        row = []
+
+    pbar.finish()
+
+    # Write output CSV file
+    if outfile_name is None:
+        outfile = sys.stdout
+    else:
+        outfile = open(outfile_name, 'w')
+
+    if not outfile:
+        raise FileNotFoundError("Couldn't open output file")
+
+    print("\nWriting output file", file=sys.stderr)
+    header = ['']
+    fieldnames = ['release']
+    for company in companies.split(","):
+        header.extend([company, ''])
+        if _all is True:
+            fieldnames.extend(['#all_developers', '#module_developers'])
+        else:
+            fieldnames.extend(['#module_developers'])
+
+    writer = csv.writer(outfile)
+    writer.writerow(header)
+    writer.writerow(fieldnames)
+    writer.writerows(results)
+
+    outfile.close()
 
 def pull_contributions(project: str, releases: str, modules: str,
                        companies: str, outfile_name: str):
@@ -86,7 +204,7 @@ def pull_contributions(project: str, releases: str, modules: str,
 
                 # Make a GET request and read the response
                 try:
-                    u = request.urlopen(BASE_URL + '?' + querystring)
+                    u = request.urlopen(BASE_URL_CONTRIB + '?' + querystring)
                     contribution = json.loads(u.read().decode(encoding='UTF-8'))['contribution']
 
                     if not _module:
@@ -166,23 +284,26 @@ def example0():
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description="Stackalytics data retriever")
+    parser.add_argument('-S', '--commits', action='store_true', help='Generate commit stats')
+    parser.add_argument('-A', '--authors', action='store_true', help='Generate authors stats')
+    parser.add_argument('-C', '--coremodules', action="store_true", help='Get OpenStack core (mature) modules')
+    parser.add_argument('-e', '--extramodules', action="store_true", help='Get some less mature OpenStack modules')
     parser.add_argument('-p', '--project', dest='project', help='project name')
     parser.add_argument('-r', '--releases', dest='releases', help='OpenStack release names')
     parser.add_argument('-m', '--modules', dest='modules', help='OpenStack module names')
-    parser.add_argument('-C', '--coremodules', action="store_true", help='Get OpenStack core (mature) modules')
-    parser.add_argument('-E', '--extramodules', action="store_true", help='Get some less mature OpenStack modules')
     parser.add_argument('-c', '--companies', dest='companies', help='Company names')
     parser.add_argument('-o', '--output', dest='outfile_name',
                         help='Output CSV file name (defaults to stdout)')
 
     args = parser.parse_args()
 
+
     if not args.project:
         args.project = "openstack"
     if not args.releases:
-        args.releases = "Pike,Ocata,Newton,Mitaka,Liberty,Kilo,Juno,Icehouse,Havana,Grizzly,All"
+        args.releases = "Queens,Pike,Ocata,Newton,Mitaka,Liberty,Kilo,Juno,Icehouse,Havana,Grizzly,Folsom,Essex,Diablo,Cactus,Bexar,Austin,All"
     if not args.companies:
-        args.companies = "All,Red Hat,SUSE,Mirantis,Canonical,b1 systems gmbh"
+        args.companies = "All,Red Hat,SUSE,Mirantis,Canonical"
     if args.coremodules:
         args.modules = "All,cinder-group,glance-group,keystone-group,neutron-group,nova-group,swift-group"
     elif args.extramodules:
@@ -190,4 +311,8 @@ if __name__ == '__main__':
     elif not args.modules:
         args.modules = "All,cinder-group,glance-group,keystone-group,neutron-group,nova-group,swift-group,aodh,barbican-group,ceilometer-group,designate-group,gnocchi,heat-group,horizon-group,ironic-group,magnum-group,manila-group,mistral-group,monasca-group,murano-group,panko,rally-group,sahara-group,tempest,trove-group,openstackclient-group,oslo-group,security-group,documentation-group"
 
-    pull_contributions(args.project, args.releases, args.modules, args.companies, args.outfile_name)
+    if args.commits:
+        pull_contributions(args.project, args.releases, args.modules, args.companies, args.outfile_name)
+    elif args.authors:
+        pull_contributors(args.project, args.releases, args.modules, args.companies, args.outfile_name)
+
