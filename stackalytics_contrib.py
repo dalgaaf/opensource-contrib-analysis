@@ -1,6 +1,6 @@
 #! /usr/bin/env python3
 """
- Credits: This script is based on a python script from 
+ Credits: This script is based on a python script from
           https://github.com/osic/stackalytics.git
           and was extended/adopted to fit my use case.
 """
@@ -30,7 +30,7 @@ def total_reviews(marks):
     return total
 
 
-def pull_contributions(project: str, releases: str, modules: str, 
+def pull_contributions(project: str, releases: str, modules: str,
                        companies: str, outfile_name: str):
 
     results = []
@@ -42,7 +42,7 @@ def pull_contributions(project: str, releases: str, modules: str,
     _current = 0
 
     # default parameter for OpenStack statistics
-    parms['project_type'] = project.lower() 
+    parms['project_type'] = project.lower()
 
     # TODO: iter over the release/module/company
     split_releases = releases.split(",")
@@ -56,7 +56,7 @@ def pull_contributions(project: str, releases: str, modules: str,
     for release in split_releases:
         parms['release'] = release.lower()
         _module = None
-        # append row if needed 
+        # append row if needed
         if row and _release != release:
             results.append(row)
             row = []
@@ -67,7 +67,7 @@ def pull_contributions(project: str, releases: str, modules: str,
                 parms['module'] = ""
             else:
                 parms['module'] = module.lower()
-            # append row if needed 
+            # append row if needed
             if row and _module != module:
                 results.append(row)
                 row = []
@@ -81,9 +81,9 @@ def pull_contributions(project: str, releases: str, modules: str,
 
                 # Encode the query string
                 querystring = parse.urlencode(parms)
-            
+
                 #print("Query string: {0}".format(querystring), file=sys.stderr)
-            
+
                 # Make a GET request and read the response
                 try:
                     u = request.urlopen(BASE_URL + '?' + querystring)
@@ -92,7 +92,7 @@ def pull_contributions(project: str, releases: str, modules: str,
                     if not _module:
                         row.extend([release])
                         row.extend([module])
-                    
+
                     row.extend([contribution['commit_count'],
                                 contribution['drafted_blueprint_count'],
                                 contribution['completed_blueprint_count'],
@@ -118,7 +118,7 @@ def pull_contributions(project: str, releases: str, modules: str,
                 pbar.update(_current)
 
     if row:
-        # append last row if needed 
+        # append last row if needed
         results.append(row)
         row = []
 
@@ -147,7 +147,7 @@ def pull_contributions(project: str, releases: str, modules: str,
                            '#reviews',
                            '#trans'
                            ])
-            
+
     writer = csv.writer(outfile)
     writer.writerow(header)
     writer.writerow(fieldnames)
@@ -169,6 +169,8 @@ if __name__ == '__main__':
     parser.add_argument('-p', '--project', dest='project', help='project name')
     parser.add_argument('-r', '--releases', dest='releases', help='OpenStack release names')
     parser.add_argument('-m', '--modules', dest='modules', help='OpenStack module names')
+    parser.add_argument('-C', '--coremodules', action="store_true", help='Get OpenStack core (mature) modules')
+    parser.add_argument('-E', '--extramodules', action="store_true", help='Get some less mature OpenStack modules')
     parser.add_argument('-c', '--companies', dest='companies', help='Company names')
     parser.add_argument('-o', '--output', dest='outfile_name',
                         help='Output CSV file name (defaults to stdout)')
@@ -178,10 +180,14 @@ if __name__ == '__main__':
     if not args.project:
         args.project = "openstack"
     if not args.releases:
-        args.releases = "Newton,Mitaka,Liberty,Kilo,Juno,All"
+        args.releases = "Pike,Ocata,Newton,Mitaka,Liberty,Kilo,Juno,Icehouse,Havana,Grizzly,All"
     if not args.companies:
-        args.companies = "All,Red Hat,SUSE,Mirantis,Canonical"
-    if not args.modules:
-        args.modules = "All,ceilometer-group,cinder-group,glance-group,heat-group,horizon-group,ironic-group,keystone-group,neutron-group,nova-group,sahara-group,swift-group,oslo-group,security-group,documentation-group"
+        args.companies = "All,Red Hat,SUSE,Mirantis,Canonical,b1 systems gmbh"
+    if args.coremodules:
+        args.modules = "All,cinder-group,glance-group,keystone-group,neutron-group,nova-group,swift-group"
+    elif args.extramodules:
+        args.modules = "All,aodh,barbican-group,ceilometer-group,designate-group,gnocchi,heat-group,horizon-group,ironic-group,magnum-group,manila-group,mistral-group,monasca-group,murano-group,panko,rally-group,sahara-group,tempest,trove-group,openstackclient-group,oslo-group,security-group,documentation-group"
+    elif not args.modules:
+        args.modules = "All,cinder-group,glance-group,keystone-group,neutron-group,nova-group,swift-group,aodh,barbican-group,ceilometer-group,designate-group,gnocchi,heat-group,horizon-group,ironic-group,magnum-group,manila-group,mistral-group,monasca-group,murano-group,panko,rally-group,sahara-group,tempest,trove-group,openstackclient-group,oslo-group,security-group,documentation-group"
 
     pull_contributions(args.project, args.releases, args.modules, args.companies, args.outfile_name)
